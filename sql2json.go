@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"strconv"
 	"strings"
 )
 
@@ -16,13 +17,13 @@ func Convert(r io.Reader) []byte {
 type DummyTable struct {
 	Name    string
 	Columns []string
-	Rows    [][]string
+	Rows    [][]interface{}
 }
 
-func (d *DummyTable) RowMap(r int) map[string]string {
+func (d *DummyTable) RowMap(r int) map[string]interface{} {
 	row := d.Rows[r]
 
-	m := make(map[string]string)
+	m := make(map[string]interface{})
 	for i := 0; i < len(row); i++ {
 		m[d.Columns[i]] = row[i]
 	}
@@ -33,7 +34,7 @@ func (d *DummyTable) RowMap(r int) map[string]string {
 type DummyTables []*DummyTable
 
 func (d DummyTables) ToJSON() []byte {
-	jsonTables := make(map[string][]map[string]string)
+	jsonTables := make(map[string][]map[string]interface{})
 
 	for _, table := range d {
 		for i := 0; i < len(table.Rows); i++ {
@@ -65,7 +66,7 @@ func parse(r io.Reader) DummyTables {
 	for _, table := range tables {
 		tableName := strings.SplitN(table, "`", 2)[0]
 
-		dummyTable := DummyTable{tableName, make([]string, 0), make([][]string, 0)}
+		dummyTable := DummyTable{tableName, make([]string, 0), make([][]interface{}, 0)}
 		dummyTables = append(dummyTables, &dummyTable)
 
 		columnsRaw := strings.Split(table, "  `")
@@ -81,7 +82,7 @@ func parse(r io.Reader) DummyTables {
 		}
 		values := valuesData[1]
 
-		newRow := make([]string, 0)
+		newRow := make([]interface{}, 0)
 
 		open := false
 		openString := false
@@ -97,18 +98,18 @@ func parse(r io.Reader) DummyTables {
 				// Special case if number and last element
 				if open && !openString {
 					// Close and add as usual
-					newRow = append(newRow, values[start:i])
+					newRow = append(newRow, typify(values[start:i]))
 					open = false
 					i++
 
 					// Add row
 					dummyTable.Rows = append(dummyTable.Rows, newRow)
-					newRow = make([]string, 0)
+					newRow = make([]interface{}, 0)
 					continue
 				} else if !open {
 					// Means we're ending after a string, add row
 					dummyTable.Rows = append(dummyTable.Rows, newRow)
-					newRow = make([]string, 0)
+					newRow = make([]interface{}, 0)
 					i++
 					continue
 				}
@@ -116,7 +117,7 @@ func parse(r io.Reader) DummyTables {
 
 			// Null
 			if !open && values[i:i+4] == "NULL" {
-				newRow = append(newRow, values[i:i+4])
+				newRow = append(newRow, typify(values[i:i+4]))
 				i = i + 4
 				continue
 			}
@@ -133,7 +134,7 @@ func parse(r io.Reader) DummyTables {
 
 			// End number
 			if open && !openString && values[i] == ',' {
-				newRow = append(newRow, values[start:i])
+				newRow = append(newRow, typify(values[start:i]))
 				open = false
 				i++
 				continue
@@ -151,7 +152,7 @@ func parse(r io.Reader) DummyTables {
 
 			// End string
 			if openString && values[i] == '\'' {
-				newRow = append(newRow, values[start:i])
+				newRow = append(newRow, typify(values[start:i]))
 				open = false
 				openString = false
 				i++
@@ -163,4 +164,18 @@ func parse(r io.Reader) DummyTables {
 	}
 
 	return dummyTables
+}
+
+func typify(val string) interface{} {
+	i, err := strconv.ParseFloat(val, 64)
+	if err == nil {
+		return int(i)
+	}
+
+	f, err := strconv.ParseInt(val, 10, 64)
+	if err == nil {
+		return f
+	}
+
+	return val
 }
