@@ -169,12 +169,12 @@ func parse(r io.Reader) DummyTables {
 func typify(val string) interface{} {
 	i, err := strconv.ParseFloat(val, 64)
 	if err == nil {
-		return int(i)
+		return i
 	}
 
 	f, err := strconv.ParseInt(val, 10, 64)
 	if err == nil {
-		return f
+		return int(f)
 	}
 
 	return val
